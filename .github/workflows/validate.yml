@@ -1,0 +1,31 @@
+name: Validate
+
+# Две обязательные проверки для публикации в HACS:
+# hassfest — соответствие манифеста требованиям Home Assistant,
+# HACS action — структура репозитория, hacs.json, описание и топики на GitHub.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Требования обеих проверок меняются вместе с релизами HA:
+    # еженедельный прогон ловит расхождение до того, как оно всплывёт у пользователей.
+    - cron: '0 6 * * 1'
+
+jobs:
+  hassfest:
+    name: hassfest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: home-assistant/actions/hassfest@master
+
+  hacs:
+    name: HACS
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hacs/action@main
+        with:
+          category: integration

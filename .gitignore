@@ -1,0 +1,8 @@
+.venv/
+.venv314/
+__pycache__/
+*.pyc
+.coverage
+htmlcov/
+.pytest_cache/
+.DS_Store

@@ -1,0 +1,12 @@
+{
+  "domain": "likehub",
+  "name": "LikeHub",
+  "codeowners": ["@OmenWD"],
+  "config_flow": true,
+  "documentation": "https://github.com/OmenWD/LikeHub",
+  "integration_type": "hub",
+  "iot_class": "cloud_push",
+  "issue_tracker": "https://github.com/OmenWD/LikeHub/issues",
+  "requirements": [],
+  "version": "1.0.0"
+}

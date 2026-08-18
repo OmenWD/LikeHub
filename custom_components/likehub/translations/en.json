@@ -1,0 +1,89 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to LikeHub",
+        "description": "Enter your service account credentials. The password is used once to obtain tokens and is never stored.",
+        "data": {
+          "email": "Email",
+          "password": "Password",
+          "base_url": "Server address"
+        }
+      },
+      "site": {
+        "title": "Select site",
+        "description": "Your account has several sites. Choose the one this Home Assistant installation serves.",
+        "data": { "site_id": "Site" }
+      },
+      "reauth_confirm": {
+        "title": "Re-authentication",
+        "description": "Enter the password for {email}. Site settings will be preserved.",
+        "data": { "password": "Password" }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid email or password",
+      "cannot_connect": "Failed to connect to the server",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "site_already_configured": "This site is already configured",
+      "already_configured": "This site is already configured",
+      "reauth_successful": "Authentication restored"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "LikeHub settings",
+        "description": "Nothing leaves your home until you select entities. Remote control is disabled by default.",
+        "data": {
+          "entities": "Entities to send",
+          "domains": "Send entire domains",
+          "send_telemetry": "Send telemetry (alarms are always sent)",
+          "min_interval": "Minimum sync interval",
+          "allow_remote_control": "Allow remote control",
+          "role_water_valve": "Role: water valve",
+          "role_siren": "Role: siren",
+          "role_alert_light": "Role: alert light",
+          "permit_open_water": "Allow remote water opening (risk: water opens while you are away)",
+          "permit_siren_off": "Allow remote siren shutdown"
+        }
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "connected": { "name": "Command channel" }
+    },
+    "sensor": {
+      "last_sync": { "name": "Last sync" },
+      "queue": { "name": "Event queue" },
+      "last_command": { "name": "Last command" }
+    },
+    "switch": {
+      "remote_control": { "name": "Remote control" }
+    },
+    "button": {
+      "test": { "name": "Test connection" }
+    }
+  },
+  "issues": {
+    "access_revoked": {
+      "title": "Access revoked",
+      "description": "The service revoked access for this site. Re-authenticate in the integration settings."
+    },
+    "site_blocked": {
+      "title": "Site blocked",
+      "description": "The service blocked this site. Data sending has stopped. Contact support."
+    },
+    "site_not_found": {
+      "title": "Site not found",
+      "description": "The service does not know this site. It may have been deleted. Reinstall the integration."
+    },
+    "roles_not_mapped": {
+      "title": "Roles not mapped",
+      "description": "Remote control is enabled but no role is mapped to an entity. Commands will be rejected."
+    }
+  }
+}

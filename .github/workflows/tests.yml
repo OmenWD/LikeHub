@@ -1,0 +1,48 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: HA ${{ matrix.ha }} · Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      # TASK-223: два конца поддерживаемого диапазона.
+      # Нижний — минимум из manifest.json; верхний — актуальное ядро.
+      # HA 2026.3 и новее требуют Python >= 3.14.2, поэтому версия Python
+      # привязана к версии ядра, а не выбирается произвольно.
+      matrix:
+        include:
+          - ha: '2025.1.4'
+            python: '3.13'
+            harness: '0.13.145'
+          - ha: '2026.8.2'
+            python: '3.14'
+            harness: '0.13.316'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Установка стенда
+        run: |
+          pip install --upgrade pip
+          pip install "pytest-homeassistant-custom-component==${{ matrix.harness }}"
+
+      - name: Проверка версии ядра
+        run: |
+          INSTALLED=$(pip show homeassistant | awk '/^Version:/ {print $2}')
+          echo "Home Assistant: $INSTALLED"
+          if [ "$INSTALLED" != "${{ matrix.ha }}" ]; then
+            echo "Ожидалась ${{ matrix.ha }}, установлена $INSTALLED — обновите версию стенда в матрице"
+            exit 1
+          fi
+
+      - name: Тесты
+        run: pytest -q
