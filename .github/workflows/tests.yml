@@ -22,9 +22,15 @@ jobs:
           - ha: '2025.1.0'
             python: '3.13'
             harness: '0.13.201'
+            # pycares 4.6.0 (апрель 2025) поднимает демон-поток безопасного
+            # завершения. Проверка verify_cleanup стенда 0.13.201 о нём не знает
+            # и роняет первый же тест, который создаёт клиентскую сессию.
+            # 4.5.0 — версия, актуальная на момент выпуска HA 2025.1.0.
+            pins: 'pycares==4.5.0'
           - ha: '2026.8.2'
             python: '3.14'
             harness: '0.13.356'
+            pins: ''
     steps:
       - uses: actions/checkout@v4
 
@@ -36,6 +42,9 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install "pytest-homeassistant-custom-component==${{ matrix.harness }}"
+          # Транзитивные зависимости старого ядра доводятся до версий его времени:
+          # свежие колёса ломают проверки стенда, а не код интеграции.
+          if [ -n "${{ matrix.pins }}" ]; then pip install "${{ matrix.pins }}"; fi
 
       - name: Проверка версии ядра
         run: |
