@@ -62,6 +62,7 @@ from .const import (
     OPT_ROLE_PREFIX,
     OPT_SEND_TELEMETRY,
     ROLES,
+    SIGNUP_URL,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -116,7 +117,12 @@ class LikeHubConfigFlow(ConfigFlow, domain=DOMAIN):
                 return await self._async_create(self._login)
 
         return self.async_show_form(
-            step_id="user", data_schema=STEP_USER_SCHEMA, errors=errors
+            step_id="user",
+            data_schema=STEP_USER_SCHEMA,
+            errors=errors,
+            # Учётная запись заводится на сайте сервиса: интеграция регистрацию
+            # не выполняет и без готового аккаунта войти не может (КП-09).
+            description_placeholders={"signup_url": SIGNUP_URL},
         )
 
     async def async_step_site(

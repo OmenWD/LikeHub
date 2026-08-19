@@ -13,7 +13,14 @@ from typing import Final
 
 DOMAIN: Final = "likehub"
 AGENT_VERSION: Final = "1.0.0"
-DEFAULT_BASE_URL: Final = "https://api.likehub.me"
+# Единственная точка правки при смене домена: от неё считаются адрес API
+# и ссылка на регистрацию, которую видит пользователь в форме входа.
+# Пока стоит тестовый домен. Перед публикацией интеграции в HACS его
+# нужно заменить на боевой likehub.me — вместе с DNS и сертификатом
+# сервера и страницей регистрации.
+BRAND_DOMAIN: Final = "saiteg.ru"
+DEFAULT_BASE_URL: Final = f"https://api.{BRAND_DOMAIN}"
+SIGNUP_URL: Final = f"https://{BRAND_DOMAIN}/signup"
 
 # --- Ключи ConfigEntry.data ---
 CONF_SITE_ID: Final = "site_id"

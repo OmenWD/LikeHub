@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Connect to LikeHub",
-        "description": "Enter your service account credentials. The password is used once to obtain tokens and is never stored.",
+        "description": "A LikeHub account is required. If you don't have one yet, [sign up]({signup_url}) and create a site, then come back here.\n\nThe password is used once to obtain tokens and is never stored.",
         "data": {
           "email": "Email",
           "password": "Password",
@@ -13,12 +13,16 @@
       "site": {
         "title": "Select site",
         "description": "Your account has several sites. Choose the one this Home Assistant installation serves.",
-        "data": { "site_id": "Site" }
+        "data": {
+          "site_id": "Site"
+        }
       },
       "reauth_confirm": {
         "title": "Re-authentication",
         "description": "Enter the password for {email}. Site settings will be preserved.",
-        "data": { "password": "Password" }
+        "data": {
+          "password": "Password"
+        }
       }
     },
     "error": {
@@ -54,18 +58,30 @@
   },
   "entity": {
     "binary_sensor": {
-      "connected": { "name": "Command channel" }
+      "connected": {
+        "name": "Command channel"
+      }
     },
     "sensor": {
-      "last_sync": { "name": "Last sync" },
-      "queue": { "name": "Event queue" },
-      "last_command": { "name": "Last command" }
+      "last_sync": {
+        "name": "Last sync"
+      },
+      "queue": {
+        "name": "Event queue"
+      },
+      "last_command": {
+        "name": "Last command"
+      }
     },
     "switch": {
-      "remote_control": { "name": "Remote control" }
+      "remote_control": {
+        "name": "Remote control"
+      }
     },
     "button": {
-      "test": { "name": "Test connection" }
+      "test": {
+        "name": "Test connection"
+      }
     }
   },
   "issues": {
