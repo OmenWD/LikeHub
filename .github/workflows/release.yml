@@ -1,0 +1,33 @@
+name: Release
+
+# Релиз публикуется по тегу: HACS показывает пользователям именно релизы,
+# а не состояние ветки. Тег обязан совпадать с `version` в manifest.json —
+# иначе HACS поставит одну версию, а интеграция сообщит серверу другую.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Сверить тег с версией манифеста
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          manifest=$(python -c "import json;print(json.load(open('custom_components/likehub/manifest.json'))['version'])")
+          if [ "$tag" != "$manifest" ]; then
+            echo "Тег $GITHUB_REF_NAME не совпадает с version=$manifest в manifest.json" >&2
+            exit 1
+          fi
+
+      - name: Создать релиз
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
