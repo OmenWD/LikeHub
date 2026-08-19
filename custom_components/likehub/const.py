@@ -20,7 +20,9 @@ AGENT_VERSION: Final = "1.0.0"
 # сервера и страницей регистрации.
 BRAND_DOMAIN: Final = "saiteg.ru"
 DEFAULT_BASE_URL: Final = f"https://api.{BRAND_DOMAIN}"
-SIGNUP_URL: Final = f"https://{BRAND_DOMAIN}/signup"
+# Регистрация — во вкладке «Регистрация» на экране входа веб-кабинета
+# (likehub-web). Отдельной страницы /signup нет.
+SIGNUP_URL: Final = f"https://{BRAND_DOMAIN}/crm/"
 
 # --- Ключи ConfigEntry.data ---
 CONF_SITE_ID: Final = "site_id"
