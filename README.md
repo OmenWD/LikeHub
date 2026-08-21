@@ -1,114 +1,120 @@
-# LikeHub — интеграция для Home Assistant
+# LikeHub — Home Assistant integration
 
-Агент облачного сервиса внутри Home Assistant: передаёт аварии, телеметрию и heartbeat, принимает и исполняет команды из кабинета LikeHub. Только исходящие HTTPS-соединения — порты открывать не нужно.
+*[Русская версия](README.ru.md)*
 
-## Требования
+Cloud agent for Home Assistant: it reports alarms, telemetry and heartbeats to the LikeHub service and executes the commands the service sends back. Outbound HTTPS only — no ports to open, no inbound connections, no HTTP handlers registered in Home Assistant.
 
-- Home Assistant 2025.1 или новее
-- Любой тип установки: HA OS, Supervised, Container, Core
-- Исходящий доступ к `https://api.likehub.me` по 443 порту
+## Requirements
 
-Внешних зависимостей нет: `manifest.json → requirements` пуст.
+- Home Assistant 2025.1 or newer
+- Any installation type: HA OS, Supervised, Container, Core
+- Outbound access to `https://api.likehub.me` on port 443
 
-## Установка
+No external dependencies: `requirements` in `manifest.json` is empty.
 
-1. Завести учётную запись на [likehub.me/crm/](https://likehub.me/crm/) — вкладка «Регистрация» на экране входа
-2. HACS → Интеграции → ⋮ → Custom repositories → добавить репозиторий, тип `Integration`
-3. Установить «LikeHub», перезапустить Home Assistant
-4. Настройки → Устройства и службы → Добавить интеграцию → «LikeHub»
-5. Ввести почту и пароль учётной записи сервиса
+## Installation
 
-Пароль используется один раз для получения токенов и **не сохраняется**: в записи хранится только refresh-токен. При смене пароля Home Assistant покажет «Требуется повторная авторизация» — достаточно ввести новый пароль, настройки объекта сохранятся.
+1. Create an account at [likehub.me/crm/](https://likehub.me/crm/) — the “Registration” tab on the sign-in screen. It creates your first site along with the account.
+2. HACS → ⋮ → **Custom repositories** → add `https://github.com/OmenWD/LikeHub`, category `Integration`.
+3. Find **LikeHub** in HACS, download the latest release, then **restart Home Assistant**.
+4. Settings → Devices & services → **Add integration** → **LikeHub**.
+5. Enter the e-mail and password of your LikeHub account. The server address is prefilled with `https://api.likehub.me`.
 
-## Настройка
+The password is used once to obtain tokens and is **never stored**: only the refresh token goes into the config entry. When you change the password, Home Assistant shows “Reauthentication required” — enter the new one and every setting of the site is preserved.
 
-Настройки → Устройства и службы → вкладка «Интеграции» → карточка «LikeHub» → у записи объекта **Настроить**. Прямая ссылка: `/config/integrations/integration/likehub`.
+If your account holds several sites, a “Select site” step follows: pick the one this Home Assistant installation serves.
 
-Открывается меню из трёх разделов.
+Manual installation without HACS: copy `custom_components/likehub/` from the release into your `config/custom_components/`, restart, and continue from step 4.
 
-**Передаваемые устройства** — то, без чего интеграция не работает: пока ничего не выбрано, наружу не уходит ничего. Два пути:
+## Configuration
 
-- *Добавить устройство* — выбрать устройство дома, затем отметить его параметры. Рядом с каждым показано текущее значение, чтобы было видно, какие именно данные уйдут. Чекбокс «Добавить ещё одно устройство» возвращает к выбору, так добавляются остальные;
-- *Убрать устройства* — отметить те, что больше не передаются. Пункт появляется, когда есть что убирать; сущности без устройства (помощники, шаблонные датчики) стоят в том же списке отдельными строками. Чтобы отключить один параметр, а не устройство целиком, снимите его отметку в «Добавить устройство»;
-- *Группы датчиков целиком* — переключатели «Все измерения», «Все сигнальные датчики», «Розетки и реле», «Освещение», «Сирены», «Краны». Группа охватывает и те сущности, которые появятся позже. Единственный способ добавить датчики без устройства — шаблонные и помощники.
+Settings → Devices & services → **Integrations** tab → the **LikeHub** card → **Configure** on the site entry. Direct link: `/config/integrations/integration/likehub`.
 
-**Дополнительно**
+A menu of three sections opens.
 
-| Опция | По умолчанию | Смысл |
+### Devices being sent
+
+Nothing leaves your home until you pick something here — this is the one section that has to be filled in. Two ways to do it:
+
+- **Add a device** — choose a device, then tick which of its readings to send. The current value is shown next to each one, so it is clear what exactly will leave the house. The “Add another device” checkbox loops back to the device picker.
+- **Remove devices** — tick what should stop being sent. The item appears only when there is something to remove. Entities without a device (helpers, template sensors) are listed there as separate rows. To drop a single reading rather than a whole device, untick it in “Add a device” instead.
+- **Whole sensor groups** — switches for *All measurements*, *All alarm sensors*, *Sockets and relays*, *Lighting*, *Sirens*, *Valves*. A group covers every matching entity, including ones you add later, and is the only way to include entities that have no device.
+
+### Advanced
+
+| Option | Default | Meaning |
 |---|---|---|
-| Отправлять телеметрию | включено | Числовые значения. Аварии по выбранным сущностям идут всегда |
-| Не чаще одной синхронизации в | 60 с | Нижняя граница, а не период: интервал назначает сервер (обычно 300 с) и ниже этого значения не опустится |
+| Send telemetry | on | Numeric readings. Alarms for the selected entities are sent regardless |
+| No more than one sync per | 60 s | A floor, not a period: the server assigns the interval (300 s by default) and cannot go below this value |
 
-**Удалённое управление** — общий рубильник исполнения команд, по умолчанию выключен. Выбор устройств для действий появится здесь вместе с выдачей команд во второй версии сервиса; до тех пор сервер отвечает пустым списком команд.
+### Remote control
 
-Настройки применяются сразу: запись перезагружается сама, перезапуск Home Assistant не нужен.
+The master switch for command execution, off by default. Device mapping for actions will appear here together with command delivery in the second version of the service; until then the server returns an empty command list.
 
-## Словарь действий
+Settings apply immediately — the entry reloads itself, no Home Assistant restart needed.
 
-Облако присылает только имя действия из закрытого списка. `domain` и `service` вычисляет сам агент по типу сопоставленной вами сущности — из команды они не берутся никогда. Команда с произвольным сервисом (например `shell_command`) отвергается с `unknown_action`, и ни один сервис Home Assistant не вызывается.
+## Entities
 
-| Действие | Роль | Что делает | Требует отдельного разрешения |
-|---|---|---|---|
-| `close_water` | кран воды | закрывает кран | нет |
-| `open_water` | кран воды | открывает кран | **да** |
-| `siren_on` | сирена | включает | нет |
-| `siren_off` | сирена | выключает | **да** |
-| `light_on` / `light_off` | аварийный свет | включает / выключает | нет |
-| `request_snapshot` | — | внеочередная отправка полного снимка | нет |
-| `ping` | — | проверка канала | нет |
-
-Порядок выдачи разрешений: включить «Удалённое управление» → сопоставить роли с сущностями → при необходимости включить разрешения на `open_water` и `siren_off`. Без сопоставленной роли команда отвергается с `role_not_mapped`.
-
-Сопоставление ролей и отдельные разрешения в форме настроек пока не показываются: сервер команды не выдаёт, и настраивать нечего. Экран появится вместе с выдачей команд; проверки в агенте уже написаны и работают.
-
-Каждая исполненная команда попадает в логбук с указанием действия, сущности, инициатора и статуса.
-
-## Сущности
-
-| Сущность | Что показывает |
+| Entity | What it shows |
 |---|---|
-| `binary_sensor.*_канал_команд` | установлен ли канал команд (SSE) |
-| `sensor.*_последняя_синхронизация` | время последней подтверждённой синхронизации |
-| `sensor.*_очередь_событий` | сколько событий ждёт отправки; в атрибутах — сколько отброшено |
-| `sensor.*_последняя_команда` | статус последней команды и её атрибуты |
-| `switch.*_удалённое_управление` | рубильник, доступный из автоматизаций |
-| `button.*_проверить_связь` | отправляет тестовое событие |
+| `binary_sensor.*_command_channel` | whether the command channel (SSE) is established |
+| `sensor.*_last_sync` | time of the last acknowledged synchronization |
+| `sensor.*_event_queue` | how many events wait to be sent; the attributes carry how many were dropped |
+| `sensor.*_last_command` | status of the last command and its attributes |
+| `switch.*_remote_control` | the master switch, usable from automations |
+| `button.*_test_connection` | sends a test event immediately |
 
-## Что происходит при потере связи
+## Action dictionary
 
-События копятся в очереди (до 5000) и переживают перезагрузку Home Assistant. После восстановления связи всё доставляется без дублей. При переполнении отбрасывается только телеметрия — аварии не отбрасываются никогда, а число потерянных сообщается серверу.
+The cloud sends only an action name from a closed list. The `domain` and `service` are derived by the agent itself from the type of the entity you mapped — they are never taken from the command. A command carrying an arbitrary service (`shell_command`, say) is rejected with `unknown_action`, and no Home Assistant service is called at all.
 
-Запись очереди на диск отложенная (раз в 10 секунд и только при изменении): Home Assistant часто работает с SD-карты.
+| Action | Role | What it does | Needs a separate permission |
+|---|---|---|---|
+| `close_water` | water valve | closes the valve | no |
+| `open_water` | water valve | opens the valve | **yes** |
+| `siren_on` | siren | turns on | no |
+| `siren_off` | siren | turns off | **yes** |
+| `light_on` / `light_off` | alert light | turns on / off | no |
+| `request_snapshot` | — | sends a full snapshot out of turn | no |
+| `ping` | — | channel check | no |
 
-## Удалённое управление появится в версии 2
+Every executed command lands in the logbook with the action, the entity, the initiator and the result.
 
-Блок исполнения команд реализован в агенте полностью, но серверная часть выдачи команд выйдет вторым этапом. До этого сервер отвечает пустым списком команд, а `switch.*_удалённое_управление` остаётся выключенным. Это осознанное решение: менять протокол команд после установки у пользователей дороже, чем реализовать его сразу.
+Role mapping and the two permissions are not shown in the settings form yet: the server issues no commands, so there is nothing to configure. The checks themselves are implemented in the agent and covered by tests; the screen returns together with command delivery.
 
-## Бренд-иконки
+## Remote control arrives in version 2
 
-Иконки лежат прямо в интеграции — `custom_components/likehub/brand/` (механизм HA 2026.3+,
-объявлять в манифесте ничего не нужно). Для версий 2025.1–2026.2 те же файлы подаются
-отдельным PR в [home-assistant/brands](https://github.com/home-assistant/brands);
-заготовка и генератор — в `brand/`.
+Command execution is fully implemented in the agent, but the server side of command delivery ships in the second stage. Until then the server answers with an empty command list and `switch.*_remote_control` stays off. This is deliberate: changing the command protocol after users have installed the integration costs more than implementing it up front.
 
-Перерисовать: `python brand/generate_icons.py --variant a --out brand`
+## When the connection drops
 
-## Разработка
+Events pile up in a queue (up to 5000) that survives a Home Assistant restart. Once the link is back, everything is delivered without duplicates. On overflow only telemetry is discarded — alarms are never dropped, and the number of lost messages is reported to the server.
+
+The queue is written to disk lazily (every 10 seconds, and only when it changed): Home Assistant often runs from an SD card.
+
+## Privacy
+
+- The password is neither stored nor logged
+- Nothing is sent to the cloud until you explicitly select entities
+- Tokens, the signing key and the e-mail address are stripped from diagnostics
+- Connections are outbound only: the integration opens no ports and registers no HTTP handlers
+
+## Brand icons
+
+Icons live inside the integration — `custom_components/likehub/brand/` (the HA 2026.3+ mechanism, nothing to declare in the manifest). For 2025.1–2026.2 the same files are submitted through a pull request to [home-assistant/brands](https://github.com/home-assistant/brands); the source and generator are in `brand/`.
+
+Redraw: `python brand/generate_icons.py --variant a --out brand`
+
+## Development
 
 ```bash
 python3.13 -m venv .venv
 .venv/bin/pip install pytest-homeassistant-custom-component
-.venv/bin/python -m pytest          # 71 тест, покрытие 87 %
+.venv/bin/python -m pytest          # 86 tests, 89 % coverage
 ```
 
-## Приватность
+CI runs the suite on both ends of the supported range: Python 3.13 with HA 2025.1 (the manifest minimum) and Python 3.14 with the current core, plus hassfest and the HACS action.
 
-- Пароль не сохраняется и не логируется
-- До явного выбора сущностей в облако не уходит ничего
-- Токены, ключ подписи и e-mail вырезаются из диагностики
-- Соединения только исходящие: интеграция не открывает портов и не регистрирует HTTP-обработчиков
+## License
 
-## Лицензия
-
-[Apache License 2.0](LICENSE). Название и логотип LikeHub — товарные знаки правообладателя;
-лицензия на код прав на них не даёт (§6).
+[Apache License 2.0](LICENSE). The LikeHub name and logo are trademarks of the rights holder; the code license grants no rights to them (§6).
