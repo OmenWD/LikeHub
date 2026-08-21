@@ -196,12 +196,12 @@ async def test_unticking_removes_only_this_device(
     assert config_entry.options[OPT_ENTITIES] == [FOREIGN, BATTERY]
 
 
-async def test_device_without_readings_shows_error(
+async def test_no_suitable_devices_aborts_with_explanation(
     hass: HomeAssistant, config_entry: MockConfigEntry
 ) -> None:
-    """Устройство без пригодных сущностей объясняет себя, а не даёт пустой список."""
+    """Выбирать нечего — говорим об этом, а не показываем пустой список."""
     config_entry.add_to_hass(hass)
-    device = dr.async_get(hass).async_get_or_create(
+    dr.async_get(hass).async_get_or_create(
         config_entry_id=config_entry.entry_id,
         identifiers={(DOMAIN, "empty")},
         name="Пустышка",
@@ -214,12 +214,9 @@ async def test_device_without_readings_shows_error(
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {OPT_ADD_ANOTHER: True}
     )
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {CONF_DEVICE: device.id}
-    )
 
-    assert result["step_id"] == "add_device"
-    assert result["errors"] == {"base": "device_without_entities"}
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "no_devices"
 
 
 async def test_groups_save_domains(
@@ -396,15 +393,16 @@ async def test_summary_is_a_markdown_table(
     ]
 
 
-async def test_own_entities_are_never_offered(
-    hass: HomeAssistant, config_entry: MockConfigEntry
+async def test_own_device_is_not_offered(
+    hass: HomeAssistant, config_entry: MockConfigEntry, leak_device: str
 ) -> None:
-    """Свои сенсоры выбрать нельзя: очередь растёт от отправки и зацикливается (BUG-008)."""
-    config_entry.add_to_hass(hass)
-    devices = dr.async_get(hass)
-    entities = er.async_get(hass)
+    """Своё устройство в списке не показывается (BUG-008).
 
-    own = devices.async_get_or_create(
+    Штатный DeviceSelector исключать интеграцию не умеет, поэтому список
+    собирается вручную: выбрать сенсор очереди — значит завести петлю событий.
+    """
+    entities = er.async_get(hass)
+    own = dr.async_get(hass).async_get_or_create(
         config_entry_id=config_entry.entry_id,
         identifiers={(DOMAIN, "site_agent")},
         name="LikeHub (Квартира на Ленина)",
@@ -421,10 +419,10 @@ async def test_own_entities_are_never_offered(
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {OPT_ADD_ANOTHER: True}
     )
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {CONF_DEVICE: own.id}
-    )
 
-    # Пригодных параметров у собственного устройства нет — выбирать нечего.
-    assert result["step_id"] == "add_device"
-    assert result["errors"] == {"base": "device_without_entities"}
+    offered = {
+        option["value"]: option["label"]
+        for option in result["data_schema"].schema[CONF_DEVICE].config["options"]
+    }
+    assert own.id not in offered
+    assert leak_device in offered

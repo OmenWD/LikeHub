@@ -22,9 +22,6 @@ from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     BooleanSelector,
-    DeviceSelector,
-    DeviceSelectorConfig,
-    EntityFilterSelectorConfig,
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
@@ -330,19 +327,28 @@ class LikeHubOptionsFlow(OptionsFlow):
             self._device_id = user_input[CONF_DEVICE]
             if self._device_entity_choices(self._device_id):
                 return await self.async_step_device_entities()
-            # Устройство без единой пригодной сущности выбрать можно, но настраивать
-            # в нём нечего — честнее сказать сразу, чем показать пустой список.
+            # Сюда попасть можно только гонкой: устройство исчезло или лишилось
+            # сущностей между показом формы и отправкой.
             errors["base"] = "device_without_entities"
+
+        # Свой список вместо DeviceSelector: штатный пикер не умеет исключать
+        # интеграцию, и в нём оказывалось само устройство LikeHub — выбрать его
+        # значило завести петлю событий (BUG-008). Показываем ровно то, что
+        # действительно можно передавать.
+        devices = self._selectable_devices()
+        if not devices:
+            return self.async_abort(reason="no_devices")
 
         schema = vol.Schema(
             {
-                vol.Required(CONF_DEVICE): DeviceSelector(
-                    DeviceSelectorConfig(
-                        entity=[
-                            EntityFilterSelectorConfig(
-                                domain=list(DOMAIN_GROUPS.values())
-                            )
-                        ]
+                vol.Required(CONF_DEVICE): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[
+                            SelectOptionDict(value=device_id, label=label)
+                            for device_id, label in devices.items()
+                        ],
+                        mode=SelectSelectorMode.DROPDOWN,
+                        sort=True,
                     )
                 )
             }
@@ -534,6 +540,21 @@ class LikeHubOptionsFlow(OptionsFlow):
             key = f"device:{device_id}" if device_id else f"entity:{entity_id}"
             grouped.setdefault(key, []).append(entity_id)
         return grouped
+
+    def _selectable_devices(self) -> dict[str, str]:
+        """Устройства, у которых есть что передавать, с областью в подписи."""
+        from homeassistant.helpers import area_registry as ar
+        from homeassistant.helpers import device_registry as dr
+
+        areas = ar.async_get(self.hass)
+        result: dict[str, str] = {}
+        for device in dr.async_get(self.hass).devices.values():
+            if not self._device_entity_choices(device.id):
+                continue
+            name = device.name_by_user or device.name or device.id
+            area = areas.async_get_area(device.area_id) if device.area_id else None
+            result[device.id] = f"{name} · {area.name}" if area else name
+        return result
 
     def _key_name(self, key: str) -> str:
         """Имя строки списка: устройство или отдельная сущность без устройства."""

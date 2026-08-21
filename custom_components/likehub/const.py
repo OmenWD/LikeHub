@@ -12,7 +12,7 @@ from enum import StrEnum
 from typing import Final
 
 DOMAIN: Final = "likehub"
-AGENT_VERSION: Final = "1.3.0"
+AGENT_VERSION: Final = "1.3.1"
 """Уходит на сервер в теле синхронизации и заголовке; держится вровень с `manifest.json`."""
 # Единственная точка правки при смене домена: от неё считаются адрес API
 # и ссылка на регистрацию, которую видит пользователь в форме входа.

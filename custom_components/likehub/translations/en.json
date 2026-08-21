@@ -127,6 +127,9 @@
     },
     "error": {
       "device_without_entities": "This device has no readings suitable for sending. Pick another one."
+    },
+    "abort": {
+      "no_devices": "No device with suitable sensors was found. Add devices to Home Assistant, or send whole sensor groups instead."
     }
   },
   "entity": {
