@@ -147,7 +147,15 @@ class LikeHubCoordinator:
 
     @property
     def selected_entities(self) -> set[str]:
-        """Сущности, выбранные владельцем. Пусто — наружу не уходит ничего (СБ-09)."""
+        """Сущности, выбранные владельцем. Пусто — наружу не уходит ничего (СБ-09).
+
+        Собственные сущности интеграции исключаются всегда, что бы ни стояло
+        в опциях (BUG-008). `sensor.*_очередь_событий` меняется от самой отправки:
+        подписка на него превращается в самоподдерживающуюся петлю — событие
+        растит очередь, рост очереди рождает следующее событие, и так до
+        переполнения. Отсечка здесь, а не только в форме: домены целиком
+        затягивают те же сущности мимо поштучного выбора.
+        """
         options = self.entry.options
         selected: set[str] = set(options.get(OPT_ENTITIES, []) or [])
 
@@ -156,7 +164,15 @@ class LikeHubCoordinator:
             for state in self.hass.states.async_all():
                 if state.domain in domains:
                     selected.add(state.entity_id)
-        return selected
+
+        return {entity_id for entity_id in selected if not self._is_own(entity_id)}
+
+    def _is_own(self, entity_id: str) -> bool:
+        """Сущность создана этой же интеграцией."""
+        from homeassistant.helpers import entity_registry as er
+
+        entry = er.async_get(self.hass).async_get(entity_id)
+        return entry is not None and entry.platform == DOMAIN
 
     @property
     def send_telemetry(self) -> bool:

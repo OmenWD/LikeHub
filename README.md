@@ -34,11 +34,16 @@ A menu of three sections opens.
 
 ### Devices being sent
 
-Nothing leaves your home until you pick something here — this is the one section that has to be filled in. Two ways to do it:
+Nothing leaves your home until you pick something here — this is the one section that has to be filled in.
 
-- **Add a device** — choose a device, then tick which of its readings to send. The current value is shown next to each one, so it is clear what exactly will leave the house. The “Add another device” checkbox loops back to the device picker.
-- **Remove devices** — tick what should stop being sent. The item appears only when there is something to remove. Entities without a device (helpers, template sensors) are listed there as separate rows. To drop a single reading rather than a whole device, untick it in “Add a device” instead.
-- **Whole sensor groups** — switches for *All measurements*, *All alarm sensors*, *Sockets and relays*, *Lighting*, *Sirens*, *Valves*. A group covers every matching entity, including ones you add later, and is the only way to include entities that have no device.
+The section opens with a table of what is being sent — device, how many readings, and which ones — and below it the same list as ticks. **Unticking a row is how you remove it**: the device stops being sent, while it and its entities stay untouched in Home Assistant. Entities without a device (helpers, template sensors) appear as their own rows.
+
+Two ticks lead further:
+
+- **Add a device** — choose a device, then tick which of its readings to send. The current value is shown next to each one, so it is clear what exactly will leave the house. “Add another device” loops back to the picker.
+- **Configure whole sensor groups** — switches for *All measurements*, *All alarm sensors*, *Sockets and relays*, *Lighting*, *Sirens*, *Valves*. A group covers every matching entity, including ones you add later, and is the only way to include entities that have no device.
+
+The integration's own diagnostic entities are never offered and are ignored even if a whole domain is selected: `sensor.*_event_queue` grows from the very act of sending, so subscribing to it would feed itself.
 
 ### Advanced
 
@@ -110,7 +115,7 @@ Redraw: `python brand/generate_icons.py --variant a --out brand`
 ```bash
 python3.13 -m venv .venv
 .venv/bin/pip install pytest-homeassistant-custom-component
-.venv/bin/python -m pytest          # 86 tests, 89 % coverage
+.venv/bin/python -m pytest          # 88 tests, 89 % coverage
 ```
 
 CI runs the suite on both ends of the supported range: Python 3.13 with HA 2025.1 (the manifest minimum) and Python 3.14 with the current core, plus hassfest and the HACS action.

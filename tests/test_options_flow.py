@@ -16,7 +16,9 @@ from custom_components.likehub.const import (
     OPT_ALLOW_REMOTE_CONTROL,
     OPT_DOMAINS,
     OPT_ENTITIES,
+    OPT_KEEP,
     OPT_MIN_INTERVAL,
+    OPT_OPEN_GROUPS,
     OPT_SEND_TELEMETRY,
 )
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -98,7 +100,7 @@ async def test_device_cycle_saves_selected_readings(
         result["flow_id"], {"next_step_id": "devices"}
     )
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "add_device"}
+        result["flow_id"], {OPT_ADD_ANOTHER: True}
     )
     assert result["step_id"] == "add_device"
 
@@ -124,7 +126,7 @@ async def test_readings_are_labelled_with_current_value(
         result["flow_id"], {"next_step_id": "devices"}
     )
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "add_device"}
+        result["flow_id"], {OPT_ADD_ANOTHER: True}
     )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {CONF_DEVICE: leak_device}
@@ -146,7 +148,7 @@ async def test_add_another_returns_to_device_step(
         result["flow_id"], {"next_step_id": "devices"}
     )
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "add_device"}
+        result["flow_id"], {OPT_ADD_ANOTHER: True}
     )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {CONF_DEVICE: leak_device}
@@ -182,7 +184,7 @@ async def test_unticking_removes_only_this_device(
         result["flow_id"], {"next_step_id": "devices"}
     )
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "add_device"}
+        result["flow_id"], {OPT_ADD_ANOTHER: True}
     )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {CONF_DEVICE: leak_device}
@@ -210,7 +212,7 @@ async def test_device_without_readings_shows_error(
         result["flow_id"], {"next_step_id": "devices"}
     )
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "add_device"}
+        result["flow_id"], {OPT_ADD_ANOTHER: True}
     )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {CONF_DEVICE: device.id}
@@ -231,7 +233,7 @@ async def test_groups_save_domains(
         result["flow_id"], {"next_step_id": "devices"}
     )
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "groups"}
+        result["flow_id"], {OPT_OPEN_GROUPS: True}
     )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"group_sensor": True, "group_binary_sensor": True}
@@ -299,10 +301,10 @@ async def test_saving_keeps_hidden_roles_and_permissions(
     assert config_entry.options[OPT_ALLOW_REMOTE_CONTROL] is True
 
 
-async def test_remove_device_stops_sending_it(
+async def test_unticking_in_the_list_removes_a_device(
     hass: HomeAssistant, config_entry: MockConfigEntry, leak_device: str
 ) -> None:
-    """Устройство убирается целиком, выбор по остальным сохраняется (ФТ-Н-03)."""
+    """Список передаваемого — он же управление: снятая отметка убирает устройство."""
     hass.config_entries.async_update_entry(
         config_entry, options={OPT_ENTITIES: [LEAK, BATTERY, FOREIGN]}
     )
@@ -311,29 +313,28 @@ async def test_remove_device_stops_sending_it(
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"next_step_id": "devices"}
     )
-    assert "remove_device" in result["menu_options"]
+    assert result["step_id"] == "devices"
 
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "remove_device"}
-    )
-    labels = {
-        option["value"]: option["label"]
-        for option in result["data_schema"].schema[CONF_DEVICE].config["options"]
-    }
-    assert labels[f"device:{leak_device}"] == "Датчик протечки (кухня) · 2"
+    options = result["data_schema"].schema[OPT_KEEP].config["options"]
+    keys = [option["value"] for option in options]
+    assert keys[0] == f"device:{leak_device}"
+    assert options[0]["label"] == "Датчик протечки (кухня) · 2"
+    # По умолчанию отмечено всё, что передаётся сейчас.
+    assert result["data_schema"]({})[OPT_KEEP] == keys
 
+    # Снимаем отметку с датчика протечки, оставляем термостат.
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {CONF_DEVICE: [f"device:{leak_device}"]}
+        result["flow_id"], {OPT_KEEP: [keys[1]]}
     )
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert config_entry.options[OPT_ENTITIES] == [FOREIGN]
 
 
-async def test_remove_lists_entities_without_device(
+async def test_list_shows_entities_without_device(
     hass: HomeAssistant, config_entry: MockConfigEntry
 ) -> None:
-    """Помощник не привязан к устройству — в списке удаления он отдельной строкой."""
+    """Помощник не привязан к устройству — в списке он отдельной строкой."""
     config_entry.add_to_hass(hass)
     hass.states.async_set(
         "input_number.test_temp", "21", {"friendly_name": "Тестовая температура"}
@@ -346,24 +347,23 @@ async def test_remove_lists_entities_without_device(
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"next_step_id": "devices"}
     )
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "remove_device"}
-    )
 
-    options = result["data_schema"].schema[CONF_DEVICE].config["options"]
-    assert options[0]["value"] == "entity:input_number.test_temp"
-    assert options[0]["label"] == "Тестовая температура"
+    options = result["data_schema"].schema[OPT_KEEP].config["options"]
+    assert options[0] == {
+        "value": "entity:input_number.test_temp",
+        "label": "Тестовая температура",
+    }
 
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {CONF_DEVICE: ["entity:input_number.test_temp"]}
+        result["flow_id"], {OPT_KEEP: []}
     )
     assert config_entry.options[OPT_ENTITIES] == []
 
 
-async def test_remove_hidden_while_nothing_selected(
+async def test_empty_list_offers_only_the_ways_in(
     hass: HomeAssistant, config_entry: MockConfigEntry
 ) -> None:
-    """Пока ничего не выбрано, пункта удаления нет: пустая форма — тупик."""
+    """Пока ничего не передаётся, списка нет — только переходы к добавлению."""
     config_entry.add_to_hass(hass)
 
     result = await _open_menu(hass, config_entry)
@@ -371,13 +371,14 @@ async def test_remove_hidden_while_nothing_selected(
         result["flow_id"], {"next_step_id": "devices"}
     )
 
-    assert result["menu_options"] == ["add_device", "groups"]
+    assert set(result["data_schema"].schema) == {OPT_ADD_ANOTHER, OPT_OPEN_GROUPS}
+    assert result["description_placeholders"]["devices"] == "—"
 
 
-async def test_summary_is_a_markdown_list(
+async def test_summary_is_a_markdown_table(
     hass: HomeAssistant, config_entry: MockConfigEntry, leak_device: str
 ) -> None:
-    """Сводка — маркированный список: без «-» Markdown склеил бы строки в абзац."""
+    """Сводка — таблица Markdown: имя, число параметров и что именно уходит."""
     hass.config_entries.async_update_entry(
         config_entry, options={OPT_ENTITIES: [LEAK, BATTERY, FOREIGN]}
     )
@@ -387,8 +388,43 @@ async def test_summary_is_a_markdown_list(
         result["flow_id"], {"next_step_id": "devices"}
     )
 
-    devices = result["description_placeholders"]["devices"]
-    assert devices.splitlines() == [
-        "- Датчик протечки (кухня) · 2",
-        "- Термостат (гостиная) · 1",
+    assert result["description_placeholders"]["devices"].splitlines() == [
+        "| Устройство | Параметров | Что передаётся |",
+        "|---|---:|---|",
+        "| Датчик протечки (кухня) | 2 | Протечка, Заряд батареи |",
+        "| Термостат (гостиная) | 1 | Температура |",
     ]
+
+
+async def test_own_entities_are_never_offered(
+    hass: HomeAssistant, config_entry: MockConfigEntry
+) -> None:
+    """Свои сенсоры выбрать нельзя: очередь растёт от отправки и зацикливается (BUG-008)."""
+    config_entry.add_to_hass(hass)
+    devices = dr.async_get(hass)
+    entities = er.async_get(hass)
+
+    own = devices.async_get_or_create(
+        config_entry_id=config_entry.entry_id,
+        identifiers={(DOMAIN, "site_agent")},
+        name="LikeHub (Квартира на Ленина)",
+    )
+    entities.async_get_or_create(
+        "sensor", DOMAIN, "queue", device_id=own.id, suggested_object_id="likehub_queue"
+    )
+    hass.states.async_set("sensor.likehub_queue", "0", {"friendly_name": "Очередь событий"})
+
+    result = await _open_menu(hass, config_entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "devices"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {OPT_ADD_ANOTHER: True}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_DEVICE: own.id}
+    )
+
+    # Пригодных параметров у собственного устройства нет — выбирать нечего.
+    assert result["step_id"] == "add_device"
+    assert result["errors"] == {"base": "device_without_entities"}

@@ -261,3 +261,36 @@ async def test_nothing_leaves_without_selection(hass, config_entry) -> None:
     payload = api.sync.call_args[0][0]
     assert payload["events"] == []
     assert payload["states"]["items"] == []
+
+
+async def test_own_entities_excluded_from_selection(hass, coordinator) -> None:
+    """BUG-008: свои сенсоры не подписываются даже через выбор домена целиком.
+
+    `sensor.*_очередь_событий` растёт от самой отправки: подписка на него делает
+    петлю — событие растит очередь, рост очереди рождает следующее событие.
+    """
+    from homeassistant.helpers import entity_registry as er
+
+    from custom_components.likehub.const import DOMAIN, OPT_DOMAINS
+
+    registry = er.async_get(hass)
+    registry.async_get_or_create(
+        "sensor", DOMAIN, "queue", suggested_object_id="likehub_queue"
+    )
+    registry.async_get_or_create(
+        "sensor", "demo", "temp", suggested_object_id="room_temp"
+    )
+    hass.states.async_set("sensor.likehub_queue", "0")
+    hass.states.async_set("sensor.room_temp", "21")
+
+    hass.config_entries.async_update_entry(
+        coordinator.entry,
+        options={
+            OPT_ENTITIES: ["sensor.likehub_queue", "sensor.room_temp"],
+            OPT_DOMAINS: ["sensor"],
+        },
+    )
+
+    selected = coordinator.selected_entities
+    assert "sensor.room_temp" in selected
+    assert "sensor.likehub_queue" not in selected

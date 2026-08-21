@@ -62,9 +62,11 @@ from .const import (
     MIN_TICK_INTERVAL,
     OPT_ADD_ANOTHER,
     OPT_ALLOW_REMOTE_CONTROL,
+    OPT_KEEP,
     OPT_DOMAINS,
     OPT_ENTITIES,
     OPT_MIN_INTERVAL,
+    OPT_OPEN_GROUPS,
     OPT_SEND_TELEMETRY,
     SIGNUP_URL,
 )
@@ -271,17 +273,50 @@ class LikeHubOptionsFlow(OptionsFlow):
     async def async_step_devices(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        menu = ["add_device"]
-        # Пункт удаления появляется, только когда есть что удалять: пустая форма
-        # выбора — тупик, из которого человек выходит кнопкой «назад».
-        if self._current_entities():
-            menu.append("remove_device")
-        menu.append("groups")
+        """Список передаваемого: он же и есть управление.
 
-        return self.async_show_menu(
+        Отдельного шага удаления нет: снятая отметка в этом списке и означает
+        «больше не передавать». Кнопок в форме Home Assistant не бывает, поэтому
+        переходы дальше — тоже отметки.
+        """
+        grouped = self._entities_by_device()
+
+        if user_input is not None:
+            kept_keys = set(user_input.get(OPT_KEEP, []))
+            self._entities = [
+                entity_id
+                for key, entities in grouped.items()
+                for entity_id in entities
+                if key in kept_keys
+            ]
+            if user_input.get(OPT_ADD_ANOTHER):
+                return await self.async_step_add_device()
+            if user_input.get(OPT_OPEN_GROUPS):
+                return await self.async_step_groups()
+            return self._save({OPT_ENTITIES: self._entities})
+
+        schema: dict[Any, Any] = {}
+        if grouped:
+            keys = list(grouped)
+            schema[vol.Optional(OPT_KEEP, default=keys)] = SelectSelector(
+                SelectSelectorConfig(
+                    options=[
+                        SelectOptionDict(
+                            value=key, label=self._group_label(key, entities)
+                        )
+                        for key, entities in grouped.items()
+                    ],
+                    multiple=True,
+                    mode=SelectSelectorMode.LIST,
+                )
+            )
+        schema[vol.Optional(OPT_ADD_ANOTHER, default=False)] = BooleanSelector()
+        schema[vol.Optional(OPT_OPEN_GROUPS, default=False)] = BooleanSelector()
+
+        return self.async_show_form(
             step_id="devices",
-            menu_options=menu,
-            description_placeholders={"devices": self._devices_summary()},
+            data_schema=vol.Schema(schema),
+            description_placeholders={"devices": self._devices_table()},
         )
 
     # --- Цикл «устройство → его параметры» ---
@@ -347,44 +382,6 @@ class LikeHubOptionsFlow(OptionsFlow):
             data_schema=schema,
             description_placeholders={"device": self._device_name(device_id)},
         )
-
-    async def async_step_remove_device(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Убрать устройство целиком.
-
-        Снять галочки в шаге параметров тоже можно, но догадаться до этого нельзя:
-        удаление должно называться удалением и лежать на виду.
-        """
-        grouped = self._entities_by_device()
-
-        if user_input is not None:
-            dropped = set(user_input.get(CONF_DEVICE, []))
-            kept = [
-                entity_id
-                for key, entities in grouped.items()
-                for entity_id in entities
-                if key not in dropped
-            ]
-            self._entities = kept
-            return self._save({OPT_ENTITIES: kept})
-
-        choices = [
-            SelectOptionDict(value=key, label=self._group_label(key, entities))
-            for key, entities in grouped.items()
-        ]
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_DEVICE): SelectSelector(
-                    SelectSelectorConfig(
-                        options=choices,
-                        multiple=True,
-                        mode=SelectSelectorMode.LIST,
-                    )
-                )
-            }
-        )
-        return self.async_show_form(step_id="remove_device", data_schema=schema)
 
     # --- Группы датчиков целиком ---
 
@@ -493,6 +490,10 @@ class LikeHubOptionsFlow(OptionsFlow):
         for entry in er.async_entries_for_device(registry, device_id):
             if entry.domain not in DOMAIN_GROUPS.values():
                 continue
+            # Свои же диагностические сенсоры выбрать нельзя: очередь событий
+            # растёт от отправки и подписка на неё зацикливается (BUG-008).
+            if entry.platform == DOMAIN:
+                continue
             state = self.hass.states.get(entry.entity_id)
             name = (
                 state.attributes.get("friendly_name")
@@ -534,31 +535,40 @@ class LikeHubOptionsFlow(OptionsFlow):
             grouped.setdefault(key, []).append(entity_id)
         return grouped
 
-    def _group_label(self, key: str, entities: list[str]) -> str:
+    def _key_name(self, key: str) -> str:
+        """Имя строки списка: устройство или отдельная сущность без устройства."""
         if key.startswith("device:"):
-            return f"{self._device_name(key.removeprefix('device:'))} · {len(entities)}"
+            return self._device_name(key.removeprefix("device:"))
+        return self._entity_name(key.removeprefix("entity:"))
 
-        entity_id = key.removeprefix("entity:")
-        state = self.hass.states.get(entity_id)
-        if state is None:
-            return entity_id
-        return state.attributes.get("friendly_name") or entity_id
+    def _group_label(self, key: str, entities: list[str]) -> str:
+        name = self._key_name(key)
+        return f"{name} · {len(entities)}" if key.startswith("device:") else name
 
-    def _devices_summary(self) -> str:
-        """Список настроенного для описания шага.
+    def _devices_table(self) -> str:
+        """Таблица передаваемого для описания шага.
 
-        Меню Home Assistant не умеет подставлять состояние в подписи пунктов, поэтому
-        сводка выводится текстом над ними.
+        Описание рендерится как Markdown, так что таблица собирается разметкой:
+        имя, число параметров и сами параметры — иначе по одному числу непонятно,
+        что именно уходит.
         """
         grouped = self._entities_by_device()
         if not grouped:
             return "—"
-        # Пункты маркированного списка Markdown: описание шага рендерится как разметка,
-        # и строки, начатые не с «-», склеились бы в один абзац.
-        return "\n".join(
-            f"- {self._group_label(key, entities)}"
-            for key, entities in grouped.items()
-        )
+
+        rows = ["| Устройство | Параметров | Что передаётся |", "|---|---:|---|"]
+        for key, entities in grouped.items():
+            names = ", ".join(self._entity_name(e) for e in entities[:3])
+            if len(entities) > 3:
+                names += ", …"
+            rows.append(f"| {self._key_name(key)} | {len(entities)} | {names} |")
+        return "\n".join(rows)
+
+    def _entity_name(self, entity_id: str) -> str:
+        state = self.hass.states.get(entity_id)
+        if state is None:
+            return entity_id
+        return state.attributes.get("friendly_name") or entity_id
 
 
 def cv_multi_select(options: dict[str, str]) -> Any:
