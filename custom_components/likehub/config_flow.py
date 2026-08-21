@@ -22,8 +22,9 @@ from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     BooleanSelector,
-    EntitySelector,
-    EntitySelectorConfig,
+    DeviceSelector,
+    DeviceSelectorConfig,
+    EntityFilterSelectorConfig,
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
@@ -40,8 +41,8 @@ from .api import (
     LoginResult,
 )
 from .const import (
-    ACTIONS,
     CONF_BASE_URL,
+    CONF_DEVICE,
     CONF_EMAIL,
     CONF_REFRESH_TOKEN,
     CONF_SITE_ID,
@@ -52,16 +53,15 @@ from .const import (
     DEFAULT_MIN_INTERVAL,
     DEFAULT_SEND_TELEMETRY,
     DOMAIN,
+    DOMAIN_GROUPS,
     MAX_TICK_INTERVAL,
     MIN_TICK_INTERVAL,
+    OPT_ADD_ANOTHER,
     OPT_ALLOW_REMOTE_CONTROL,
     OPT_DOMAINS,
     OPT_ENTITIES,
     OPT_MIN_INTERVAL,
-    OPT_PERMISSION_PREFIX,
-    OPT_ROLE_PREFIX,
     OPT_SEND_TELEMETRY,
-    ROLES,
     SIGNUP_URL,
 )
 
@@ -234,76 +234,267 @@ class LikeHubConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class LikeHubOptionsFlow(OptionsFlow):
-    """Настройка после установки (ФТ-Н-01…07)."""
+    """Настройка после установки (ФТ-Н-01…07).
+
+    Меню вместо одной формы: единственное, без чего интеграция не работает, — выбор
+    передаваемых данных, и он не должен тонуть среди прочих полей. Роли и разрешения
+    удалённого управления из формы убраны до появления выдачи команд на сервере (О-21):
+    настраивать то, чего сервер не делает, вводит в заблуждение. Их значения в записи
+    остаются нетронутыми — форма их не показывает и не затирает.
+    """
+
+    def __init__(self) -> None:
+        self._device_id: str | None = None
+        # Накопитель для цикла «устройство → параметры»: между шагами запись ещё
+        # не сохранена, а выбор по предыдущим устройствам терять нельзя.
+        self._entities: list[str] | None = None
+
+    # --- Меню ---
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        if user_input is not None:
-            return self.async_create_entry(data=user_input)
-
         options = self.config_entry.options
-        schema: dict[Any, Any] = {
-            # По умолчанию пусто: без явного выбора наружу не уходит ничего (СБ-09).
-            vol.Optional(OPT_ENTITIES, default=list(options.get(OPT_ENTITIES, []))): (
-                EntitySelector(EntitySelectorConfig(multiple=True))
-            ),
-            vol.Optional(OPT_DOMAINS, default=list(options.get(OPT_DOMAINS, []))): (
-                vol.All(
-                    cv_multi_select(
-                        {
-                            "binary_sensor": "binary_sensor",
-                            "sensor": "sensor",
-                            "switch": "switch",
-                            "valve": "valve",
-                            "light": "light",
-                            "siren": "siren",
-                        }
+        return self.async_show_menu(
+            step_id="init",
+            menu_options=["devices", "advanced", "remote"],
+            description_placeholders={
+                "entities": str(len(options.get(OPT_ENTITIES, []) or [])),
+                "groups": str(len(options.get(OPT_DOMAINS, []) or [])),
+            },
+        )
+
+    async def async_step_devices(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        return self.async_show_menu(
+            step_id="devices",
+            menu_options=["add_device", "groups"],
+            description_placeholders={"devices": self._devices_summary()},
+        )
+
+    # --- Цикл «устройство → его параметры» ---
+
+    async def async_step_add_device(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            self._device_id = user_input[CONF_DEVICE]
+            if self._device_entity_choices(self._device_id):
+                return await self.async_step_device_entities()
+            # Устройство без единой пригодной сущности выбрать можно, но настраивать
+            # в нём нечего — честнее сказать сразу, чем показать пустой список.
+            errors["base"] = "device_without_entities"
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_DEVICE): DeviceSelector(
+                    DeviceSelectorConfig(
+                        entity=[
+                            EntityFilterSelectorConfig(
+                                domain=list(DOMAIN_GROUPS.values())
+                            )
+                        ]
                     )
                 )
-            ),
-            vol.Optional(
-                OPT_SEND_TELEMETRY,
-                default=options.get(OPT_SEND_TELEMETRY, DEFAULT_SEND_TELEMETRY),
-            ): BooleanSelector(),
-            vol.Optional(
-                OPT_MIN_INTERVAL,
-                default=options.get(OPT_MIN_INTERVAL, DEFAULT_MIN_INTERVAL),
-            ): NumberSelector(
-                NumberSelectorConfig(
-                    min=MIN_TICK_INTERVAL,
-                    max=MAX_TICK_INTERVAL,
-                    mode=NumberSelectorMode.BOX,
-                    unit_of_measurement="с",
-                )
-            ),
-            vol.Optional(
-                OPT_ALLOW_REMOTE_CONTROL,
-                default=options.get(
-                    OPT_ALLOW_REMOTE_CONTROL, DEFAULT_ALLOW_REMOTE_CONTROL
-                ),
-            ): BooleanSelector(),
-        }
+            }
+        )
+        return self.async_show_form(
+            step_id="add_device", data_schema=schema, errors=errors
+        )
 
-        # Сопоставление ролей: незаполненная роль → действие отвергается role_not_mapped.
-        for role in ROLES:
-            key = f"{OPT_ROLE_PREFIX}{role}"
-            schema[vol.Optional(key, description={"suggested_value": options.get(key)})] = (
-                EntitySelector(EntitySelectorConfig(multiple=False))
+    async def async_step_device_entities(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        device_id = self._device_id
+        assert device_id is not None
+        choices = self._device_entity_choices(device_id)
+
+        if user_input is not None:
+            chosen = list(user_input.get(OPT_ENTITIES, []))
+            # Снятые галочки означают отказ от сущности: пересобираем список так,
+            # чтобы от этого устройства остались ровно отмеченные.
+            kept = [e for e in self._current_entities() if e not in choices]
+            self._entities = kept + chosen
+
+            if user_input.get(OPT_ADD_ANOTHER):
+                self._device_id = None
+                return await self.async_step_add_device()
+            return self._save({OPT_ENTITIES: self._entities})
+
+        selected = [e for e in self._current_entities() if e in choices]
+        schema = vol.Schema(
+            {
+                vol.Optional(OPT_ENTITIES, default=selected): cv_multi_select(choices),
+                vol.Optional(OPT_ADD_ANOTHER, default=False): BooleanSelector(),
+            }
+        )
+        return self.async_show_form(
+            step_id="device_entities",
+            data_schema=schema,
+            description_placeholders={"device": self._device_name(device_id)},
+        )
+
+    # --- Группы датчиков целиком ---
+
+    async def async_step_groups(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            domains = [
+                domain
+                for key, domain in DOMAIN_GROUPS.items()
+                if user_input.get(key, False)
+            ]
+            return self._save({OPT_DOMAINS: domains})
+
+        current = self.config_entry.options.get(OPT_DOMAINS, []) or []
+        schema = vol.Schema(
+            {
+                vol.Optional(key, default=domain in current): BooleanSelector()
+                for key, domain in DOMAIN_GROUPS.items()
+            }
+        )
+        return self.async_show_form(step_id="groups", data_schema=schema)
+
+    # --- Прочее ---
+
+    async def async_step_advanced(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            return self._save(
+                {
+                    OPT_SEND_TELEMETRY: user_input[OPT_SEND_TELEMETRY],
+                    OPT_MIN_INTERVAL: int(user_input[OPT_MIN_INTERVAL]),
+                }
             )
 
-        # Отдельные разрешения для действий «на снятие защиты», по умолчанию выключены.
-        for action_name, action in ACTIONS.items():
-            if not action.confirm:
-                continue
-            key = f"{OPT_PERMISSION_PREFIX}{action_name}"
-            schema[vol.Optional(key, default=options.get(key, False))] = BooleanSelector()
+        options = self.config_entry.options
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    OPT_SEND_TELEMETRY,
+                    default=options.get(OPT_SEND_TELEMETRY, DEFAULT_SEND_TELEMETRY),
+                ): BooleanSelector(),
+                vol.Optional(
+                    OPT_MIN_INTERVAL,
+                    default=options.get(OPT_MIN_INTERVAL, DEFAULT_MIN_INTERVAL),
+                ): NumberSelector(
+                    NumberSelectorConfig(
+                        min=MIN_TICK_INTERVAL,
+                        max=MAX_TICK_INTERVAL,
+                        mode=NumberSelectorMode.BOX,
+                        unit_of_measurement="с",
+                    )
+                ),
+            }
+        )
+        return self.async_show_form(step_id="advanced", data_schema=schema)
 
-        return self.async_show_form(step_id="init", data_schema=vol.Schema(schema))
+    async def async_step_remote(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            return self._save(
+                {OPT_ALLOW_REMOTE_CONTROL: user_input[OPT_ALLOW_REMOTE_CONTROL]}
+            )
+
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    OPT_ALLOW_REMOTE_CONTROL,
+                    default=self.config_entry.options.get(
+                        OPT_ALLOW_REMOTE_CONTROL, DEFAULT_ALLOW_REMOTE_CONTROL
+                    ),
+                ): BooleanSelector()
+            }
+        )
+        return self.async_show_form(step_id="remote", data_schema=schema)
+
+    # --- Вспомогательное ---
+
+    def _save(self, changes: dict[str, Any]) -> ConfigFlowResult:
+        """Слияние с прежними опциями.
+
+        `async_create_entry` заменяет опции целиком, поэтому раздел, не показывающий
+        роли и разрешения, стёр бы их. Сохраняем поверх копии прежних значений.
+        """
+        data = dict(self.config_entry.options)
+        data.update(changes)
+        return self.async_create_entry(data=data)
+
+    def _current_entities(self) -> list[str]:
+        if self._entities is not None:
+            return self._entities
+        return list(self.config_entry.options.get(OPT_ENTITIES, []) or [])
+
+    def _device_entity_choices(self, device_id: str) -> dict[str, str]:
+        """Сущности устройства с текущим значением в подписи.
+
+        Человек выбирает «Заряд батареи · 87 %», а не `sensor.leak_battery`: видно,
+        какие именно данные покинут дом.
+        """
+        from homeassistant.helpers import entity_registry as er
+
+        registry = er.async_get(self.hass)
+        choices: dict[str, str] = {}
+        for entry in er.async_entries_for_device(registry, device_id):
+            if entry.domain not in DOMAIN_GROUPS.values():
+                continue
+            state = self.hass.states.get(entry.entity_id)
+            name = (
+                state.attributes.get("friendly_name")
+                if state is not None
+                else entry.name or entry.original_name
+            ) or entry.entity_id
+            value = state.state if state is not None else "—"
+            unit = (
+                state.attributes.get("unit_of_measurement", "")
+                if state is not None
+                else ""
+            )
+            choices[entry.entity_id] = f"{name} · {value}{f' {unit}' if unit else ''}"
+        return choices
+
+    def _device_name(self, device_id: str) -> str:
+        from homeassistant.helpers import device_registry as dr
+
+        device = dr.async_get(self.hass).async_get(device_id)
+        if device is None:
+            return device_id
+        return device.name_by_user or device.name or device_id
+
+    def _devices_summary(self) -> str:
+        """Список настроенных устройств для описания шага.
+
+        Меню Home Assistant не умеет подставлять состояние в подписи пунктов, поэтому
+        сводка выводится текстом над ними.
+        """
+        from homeassistant.helpers import entity_registry as er
+
+        entities = self._current_entities()
+        if not entities:
+            return "—"
+
+        registry = er.async_get(self.hass)
+        by_device: dict[str | None, int] = {}
+        for entity_id in entities:
+            entry = registry.async_get(entity_id)
+            device_id = entry.device_id if entry is not None else None
+            by_device[device_id] = by_device.get(device_id, 0) + 1
+
+        lines: list[str] = []
+        for device_id, count in by_device.items():
+            name = self._device_name(device_id) if device_id else "—"
+            lines.append(f"• {name}: {count}")
+        return "\n".join(lines)
 
 
 def cv_multi_select(options: dict[str, str]) -> Any:
-    """Мультивыбор доменов без зависимости от приватных хелперов HA."""
+    """Мультивыбор без зависимости от приватных хелперов HA."""
     from homeassistant.helpers import config_validation as cv
 
     return cv.multi_select(options)

@@ -140,3 +140,18 @@ async def test_remove_entry_revokes_token(hass, config_entry, mock_api) -> None:
 
     mock_api.revoke.assert_called_once()
     assert not hass.config_entries.async_entries(DOMAIN)
+
+
+def test_agent_version_matches_manifest() -> None:
+    """Версия из манифеста уходит на сервер: расхождение ловится здесь, а не у пользователя."""
+    import json
+    from pathlib import Path
+
+    from custom_components.likehub.const import AGENT_VERSION
+
+    manifest = json.loads(
+        (Path(__file__).parent.parent / "custom_components/likehub/manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert AGENT_VERSION == manifest["version"]

@@ -14,6 +14,7 @@ from custom_components.likehub.api import (
     SyncResult,
 )
 from custom_components.likehub.const import (
+    AGENT_VERSION,
     OPT_ENTITIES,
     OPT_SEND_TELEMETRY,
     Severity,
@@ -229,7 +230,7 @@ async def test_payload_contains_agent_block(hass, coordinator) -> None:
     await coordinator.async_sync(SyncReason.TICK)
     payload = coordinator.api.sync.call_args[0][0]
 
-    assert payload["agent"]["version"] == "1.0.0"
+    assert payload["agent"]["version"] == AGENT_VERSION
     assert "ha_version" in payload["agent"]
     assert "install_type" in payload["agent"]
     assert payload["queue_size"] == 0

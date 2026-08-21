@@ -12,7 +12,8 @@ from enum import StrEnum
 from typing import Final
 
 DOMAIN: Final = "likehub"
-AGENT_VERSION: Final = "1.0.0"
+AGENT_VERSION: Final = "1.1.0"
+"""Уходит на сервер в теле синхронизации и заголовке; держится вровень с `manifest.json`."""
 # Единственная точка правки при смене домена: от неё считаются адрес API
 # и ссылка на регистрацию, которую видит пользователь в форме входа.
 BRAND_DOMAIN: Final = "likehub.me"
@@ -38,6 +39,25 @@ OPT_MIN_INTERVAL: Final = "min_interval"
 OPT_ALLOW_REMOTE_CONTROL: Final = "allow_remote_control"
 OPT_ROLE_PREFIX: Final = "role_"
 OPT_PERMISSION_PREFIX: Final = "permit_"
+
+CONF_DEVICE: Final = "device"
+"""Ключ шага выбора устройства в форме настроек; в опциях не хранится."""
+OPT_ADD_ANOTHER: Final = "add_another"
+"""Чекбокс «добавить ещё одно устройство»: замыкает цикл шагов, в опциях не хранится."""
+
+DOMAIN_GROUPS: Final = {
+    "group_sensor": "sensor",
+    "group_binary_sensor": "binary_sensor",
+    "group_switch": "switch",
+    "group_light": "light",
+    "group_siren": "siren",
+    "group_valve": "valve",
+}
+"""Группы датчиков в форме настроек: ключ поля → домен HA.
+
+Отдельное булево поле на группу, а не `multi_select` по доменам: подписи и пояснения
+берутся из `strings.json` и переводятся, тогда как метки `multi_select` задаются
+в коде и остались бы на одном языке."""
 
 DEFAULT_MIN_INTERVAL: Final = 60
 DEFAULT_SEND_TELEMETRY: Final = True

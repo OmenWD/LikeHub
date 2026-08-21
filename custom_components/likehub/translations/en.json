@@ -40,20 +40,87 @@
     "step": {
       "init": {
         "title": "LikeHub settings",
-        "description": "Nothing leaves your home until you select entities. Remote control is disabled by default.",
+        "description": "Entities sent: {entities}, sensor groups: {groups}.\n\nUntil something is selected, nothing leaves your home.",
+        "menu_options": {
+          "devices": "Devices being sent",
+          "advanced": "Advanced",
+          "remote": "Remote control"
+        }
+      },
+      "devices": {
+        "title": "Devices being sent",
+        "description": "Currently sent:\n{devices}",
+        "menu_options": {
+          "add_device": "Add a device",
+          "groups": "Whole sensor groups"
+        }
+      },
+      "add_device": {
+        "title": "Select a device",
+        "description": "Pick the device whose data goes to the cloud. On the next step you choose which of its readings to send.",
         "data": {
-          "entities": "Entities to send",
-          "domains": "Send entire domains",
-          "send_telemetry": "Send telemetry (alarms are always sent)",
-          "min_interval": "Minimum sync interval",
-          "allow_remote_control": "Allow remote control",
-          "role_water_valve": "Role: water valve",
-          "role_siren": "Role: siren",
-          "role_alert_light": "Role: alert light",
-          "permit_open_water": "Allow remote water opening (risk: water opens while you are away)",
-          "permit_siren_off": "Allow remote siren shutdown"
+          "device": "Device"
+        },
+        "data_description": {
+          "device": "Only devices with sensors, switches or valves are listed. Entities without a device — helpers, for instance — are added as groups in the neighbouring section."
+        }
+      },
+      "device_entities": {
+        "title": "What to send from this device",
+        "description": "{device} — tick the readings that go to the cloud. The current value is shown next to each one.\n\nUnticking stops that reading from being sent.",
+        "data": {
+          "entities": "Device readings",
+          "add_another": "Add another device"
+        },
+        "data_description": {
+          "add_another": "Returns to device selection; your ticks are kept."
+        }
+      },
+      "groups": {
+        "title": "Whole sensor groups",
+        "description": "A group covers every matching entity in the home, including ones added later. Handy when there are too many sensors to list one by one.",
+        "data": {
+          "group_sensor": "All measurements",
+          "group_binary_sensor": "All alarm sensors",
+          "group_switch": "Sockets and relays",
+          "group_light": "Lighting",
+          "group_siren": "Sirens",
+          "group_valve": "Valves"
+        },
+        "data_description": {
+          "group_sensor": "Temperature, humidity, battery level — sensor domain",
+          "group_binary_sensor": "Leak, smoke, door opening, motion — binary_sensor domain",
+          "group_switch": "On or off state — switch domain",
+          "group_light": "Light state — light domain",
+          "group_siren": "Siren state — siren domain",
+          "group_valve": "Valve state — valve domain"
+        }
+      },
+      "advanced": {
+        "title": "Advanced",
+        "description": "What else is sent, and how often.",
+        "data": {
+          "send_telemetry": "Send telemetry",
+          "min_interval": "No more than one sync per"
+        },
+        "data_description": {
+          "send_telemetry": "Numeric sensor readings. Alarms for the selected entities are always sent, regardless of this setting.",
+          "min_interval": "A floor, not a period: the server sets the interval itself (usually 5 minutes) and cannot go below this value."
+        }
+      },
+      "remote": {
+        "title": "Remote control",
+        "description": "The master switch for command execution. While it is off, the agent performs nothing that arrives from the cloud.\n\nCommand delivery arrives in the second version of the service: until then the server returns an empty list, so there is nothing to map devices to yet.",
+        "data": {
+          "allow_remote_control": "Execute commands from the cloud"
+        },
+        "data_description": {
+          "allow_remote_control": "The same switch exists as an entity — automations can turn it off, for example while nobody is home."
         }
       }
+    },
+    "error": {
+      "device_without_entities": "This device has no readings suitable for sending. Pick another one."
     }
   },
   "entity": {

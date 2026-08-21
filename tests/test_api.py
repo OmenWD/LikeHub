@@ -17,6 +17,7 @@ from custom_components.likehub.api import (
     LikeHubSiteNotFoundError,
     LikeHubTooLargeError,
 )
+from custom_components.likehub.const import AGENT_VERSION
 
 BASE = "https://api.example.test"
 
@@ -134,7 +135,7 @@ async def test_sync_sends_required_headers(hass, api, aioclient_mock) -> None:
     headers = aioclient_mock.mock_calls[-1][3]
     assert headers["X-Site-Id"] == "site_1"
     assert headers["X-Idempotency-Key"] == "key-1"
-    assert headers["X-Agent-Version"] == "1.0.0"
+    assert headers["X-Agent-Version"] == AGENT_VERSION
     assert headers["Authorization"] == "Bearer a2"
 
 
