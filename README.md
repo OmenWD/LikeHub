@@ -110,12 +110,16 @@ Icons live inside the integration — `custom_components/likehub/brand/` (the HA
 
 Redraw: `python brand/generate_icons.py --variant a --out brand`
 
+## Changelog
+
+Every release carries its notes from [CHANGELOG.md](CHANGELOG.md), written in English. A tag without a matching section fails the release workflow, so no version ships undocumented.
+
 ## Development
 
 ```bash
 python3.13 -m venv .venv
 .venv/bin/pip install pytest-homeassistant-custom-component
-.venv/bin/python -m pytest          # 88 tests, 89 % coverage
+.venv/bin/python -m pytest          # 89 tests, 89 % coverage
 ```
 
 CI runs the suite on both ends of the supported range: Python 3.13 with HA 2025.1 (the manifest minimum) and Python 3.14 with the current core, plus hassfest and the HACS action.

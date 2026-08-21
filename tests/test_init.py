@@ -155,3 +155,24 @@ def test_agent_version_matches_manifest() -> None:
         )
     )
     assert AGENT_VERSION == manifest["version"]
+
+
+def test_changelog_has_a_section_for_this_version() -> None:
+    """Заметки к релизу берутся из CHANGELOG: выпуск без секции упал бы в CI."""
+    import json
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).parent.parent
+    version = json.loads(
+        (root / "custom_components/likehub/manifest.json").read_text(encoding="utf-8")
+    )["version"]
+
+    result = subprocess.run(
+        [sys.executable, str(root / "scripts/changelog_section.py"), version],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip(), f"Секция {version} в CHANGELOG.md пуста"

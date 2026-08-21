@@ -110,12 +110,16 @@
 
 Перерисовать: `python brand/generate_icons.py --variant a --out brand`
 
+## История изменений
+
+Заметки к каждому релизу берутся из [CHANGELOG.md](CHANGELOG.md) и пишутся по-английски. Тег без своей секции роняет workflow релиза — версия без описания не выйдет.
+
 ## Разработка
 
 ```bash
 python3.13 -m venv .venv
 .venv/bin/pip install pytest-homeassistant-custom-component
-.venv/bin/python -m pytest          # 88 тестов, покрытие 89 %
+.venv/bin/python -m pytest          # 89 тестов, покрытие 89 %
 ```
 
 CI прогоняет набор на обоих концах поддерживаемого диапазона: Python 3.13 с HA 2025.1 (минимум из манифеста) и Python 3.14 с актуальным ядром, плюс hassfest и HACS action.

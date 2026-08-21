@@ -3,10 +3,14 @@ name: Release
 # Релиз публикуется по тегу: HACS показывает пользователям именно релизы,
 # а не состояние ветки. Тег обязан совпадать с `version` в manifest.json —
 # иначе HACS поставит одну версию, а интеграция сообщит серверу другую.
+#
+# Текст релиза берётся из CHANGELOG.md и пишется по-английски: автогенерация
+# из коммитов давала русские заголовки, непонятные аудитории HACS.
 
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -17,8 +21,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Сверить тег с версией манифеста
+        if: github.ref_type == 'tag'
         run: |
           tag="${GITHUB_REF_NAME#v}"
           manifest=$(python -c "import json;print(json.load(open('custom_components/likehub/manifest.json'))['version'])")
@@ -28,6 +35,25 @@ jobs:
           fi
 
       - name: Создать релиз
+        if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+        run: |
+          # Секции нет — публиковать нечего: заметки к релизу обязательны.
+          python scripts/changelog_section.py "$GITHUB_REF_NAME" > notes.md
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md
+
+      - name: Привести заметки прежних релизов к CHANGELOG
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Релизы, выпущенные до перехода на CHANGELOG, несут русские автозаметки.
+          # Проход идемпотентный: тело всегда становится ровно секцией файла.
+          for version in $(python scripts/changelog_section.py --list); do
+            tag="v${version}"
+            [ "$tag" = "$GITHUB_REF_NAME" ] && continue
+            gh release view "$tag" >/dev/null 2>&1 || continue
+            python scripts/changelog_section.py "$version" > notes.md
+            gh release edit "$tag" --notes-file notes.md
+            echo "заметки обновлены: $tag"
+          done
