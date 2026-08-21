@@ -297,3 +297,98 @@ async def test_saving_keeps_hidden_roles_and_permissions(
     assert config_entry.options["permit_open_water"] is True
     assert config_entry.options[OPT_ENTITIES] == [LEAK]
     assert config_entry.options[OPT_ALLOW_REMOTE_CONTROL] is True
+
+
+async def test_remove_device_stops_sending_it(
+    hass: HomeAssistant, config_entry: MockConfigEntry, leak_device: str
+) -> None:
+    """Устройство убирается целиком, выбор по остальным сохраняется (ФТ-Н-03)."""
+    hass.config_entries.async_update_entry(
+        config_entry, options={OPT_ENTITIES: [LEAK, BATTERY, FOREIGN]}
+    )
+
+    result = await _open_menu(hass, config_entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "devices"}
+    )
+    assert "remove_device" in result["menu_options"]
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "remove_device"}
+    )
+    labels = {
+        option["value"]: option["label"]
+        for option in result["data_schema"].schema[CONF_DEVICE].config["options"]
+    }
+    assert labels[f"device:{leak_device}"] == "Датчик протечки (кухня) · 2"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_DEVICE: [f"device:{leak_device}"]}
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert config_entry.options[OPT_ENTITIES] == [FOREIGN]
+
+
+async def test_remove_lists_entities_without_device(
+    hass: HomeAssistant, config_entry: MockConfigEntry
+) -> None:
+    """Помощник не привязан к устройству — в списке удаления он отдельной строкой."""
+    config_entry.add_to_hass(hass)
+    hass.states.async_set(
+        "input_number.test_temp", "21", {"friendly_name": "Тестовая температура"}
+    )
+    hass.config_entries.async_update_entry(
+        config_entry, options={OPT_ENTITIES: ["input_number.test_temp"]}
+    )
+
+    result = await _open_menu(hass, config_entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "devices"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "remove_device"}
+    )
+
+    options = result["data_schema"].schema[CONF_DEVICE].config["options"]
+    assert options[0]["value"] == "entity:input_number.test_temp"
+    assert options[0]["label"] == "Тестовая температура"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_DEVICE: ["entity:input_number.test_temp"]}
+    )
+    assert config_entry.options[OPT_ENTITIES] == []
+
+
+async def test_remove_hidden_while_nothing_selected(
+    hass: HomeAssistant, config_entry: MockConfigEntry
+) -> None:
+    """Пока ничего не выбрано, пункта удаления нет: пустая форма — тупик."""
+    config_entry.add_to_hass(hass)
+
+    result = await _open_menu(hass, config_entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "devices"}
+    )
+
+    assert result["menu_options"] == ["add_device", "groups"]
+
+
+async def test_summary_is_a_markdown_list(
+    hass: HomeAssistant, config_entry: MockConfigEntry, leak_device: str
+) -> None:
+    """Сводка — маркированный список: без «-» Markdown склеил бы строки в абзац."""
+    hass.config_entries.async_update_entry(
+        config_entry, options={OPT_ENTITIES: [LEAK, BATTERY, FOREIGN]}
+    )
+
+    result = await _open_menu(hass, config_entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "devices"}
+    )
+
+    devices = result["description_placeholders"]["devices"]
+    assert devices.splitlines() == [
+        "- Датчик протечки (кухня) · 2",
+        "- Термостат (гостиная) · 1",
+    ]

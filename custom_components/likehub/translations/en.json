@@ -49,10 +49,11 @@
       },
       "devices": {
         "title": "Devices being sent",
-        "description": "Currently sent:\n{devices}",
+        "description": "Currently sent:\n\n{devices}",
         "menu_options": {
           "add_device": "Add a device",
-          "groups": "Whole sensor groups"
+          "groups": "Whole sensor groups",
+          "remove_device": "Remove devices"
         }
       },
       "add_device": {
@@ -116,6 +117,13 @@
         },
         "data_description": {
           "allow_remote_control": "The same switch exists as an entity — automations can turn it off, for example while nobody is home."
+        }
+      },
+      "remove_device": {
+        "title": "Remove devices",
+        "description": "Whatever you tick stops being sent to the cloud. The devices and their entities stay in Home Assistant — only what leaves your home changes.\n\nTo drop a single reading rather than the whole device, go back to «Add a device» and untick it there.",
+        "data": {
+          "device": "Stop sending"
         }
       }
     },

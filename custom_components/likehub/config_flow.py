@@ -28,6 +28,10 @@ from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
+    SelectOptionDict,
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
@@ -267,9 +271,16 @@ class LikeHubOptionsFlow(OptionsFlow):
     async def async_step_devices(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        menu = ["add_device"]
+        # Пункт удаления появляется, только когда есть что удалять: пустая форма
+        # выбора — тупик, из которого человек выходит кнопкой «назад».
+        if self._current_entities():
+            menu.append("remove_device")
+        menu.append("groups")
+
         return self.async_show_menu(
             step_id="devices",
-            menu_options=["add_device", "groups"],
+            menu_options=menu,
             description_placeholders={"devices": self._devices_summary()},
         )
 
@@ -336,6 +347,44 @@ class LikeHubOptionsFlow(OptionsFlow):
             data_schema=schema,
             description_placeholders={"device": self._device_name(device_id)},
         )
+
+    async def async_step_remove_device(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Убрать устройство целиком.
+
+        Снять галочки в шаге параметров тоже можно, но догадаться до этого нельзя:
+        удаление должно называться удалением и лежать на виду.
+        """
+        grouped = self._entities_by_device()
+
+        if user_input is not None:
+            dropped = set(user_input.get(CONF_DEVICE, []))
+            kept = [
+                entity_id
+                for key, entities in grouped.items()
+                for entity_id in entities
+                if key not in dropped
+            ]
+            self._entities = kept
+            return self._save({OPT_ENTITIES: kept})
+
+        choices = [
+            SelectOptionDict(value=key, label=self._group_label(key, entities))
+            for key, entities in grouped.items()
+        ]
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_DEVICE): SelectSelector(
+                    SelectSelectorConfig(
+                        options=choices,
+                        multiple=True,
+                        mode=SelectSelectorMode.LIST,
+                    )
+                )
+            }
+        )
+        return self.async_show_form(step_id="remove_device", data_schema=schema)
 
     # --- Группы датчиков целиком ---
 
@@ -467,30 +516,49 @@ class LikeHubOptionsFlow(OptionsFlow):
             return device_id
         return device.name_by_user or device.name or device_id
 
+    def _entities_by_device(self) -> dict[str, list[str]]:
+        """Выбранные сущности по устройствам.
+
+        Ключ — `device:<id>` либо `entity:<entity_id>` для сущностей без устройства
+        (помощники, шаблонные датчики): они удаляются поштучно и в список выбора
+        попадают отдельными строками.
+        """
+        from homeassistant.helpers import entity_registry as er
+
+        registry = er.async_get(self.hass)
+        grouped: dict[str, list[str]] = {}
+        for entity_id in self._current_entities():
+            entry = registry.async_get(entity_id)
+            device_id = entry.device_id if entry is not None else None
+            key = f"device:{device_id}" if device_id else f"entity:{entity_id}"
+            grouped.setdefault(key, []).append(entity_id)
+        return grouped
+
+    def _group_label(self, key: str, entities: list[str]) -> str:
+        if key.startswith("device:"):
+            return f"{self._device_name(key.removeprefix('device:'))} · {len(entities)}"
+
+        entity_id = key.removeprefix("entity:")
+        state = self.hass.states.get(entity_id)
+        if state is None:
+            return entity_id
+        return state.attributes.get("friendly_name") or entity_id
+
     def _devices_summary(self) -> str:
-        """Список настроенных устройств для описания шага.
+        """Список настроенного для описания шага.
 
         Меню Home Assistant не умеет подставлять состояние в подписи пунктов, поэтому
         сводка выводится текстом над ними.
         """
-        from homeassistant.helpers import entity_registry as er
-
-        entities = self._current_entities()
-        if not entities:
+        grouped = self._entities_by_device()
+        if not grouped:
             return "—"
-
-        registry = er.async_get(self.hass)
-        by_device: dict[str | None, int] = {}
-        for entity_id in entities:
-            entry = registry.async_get(entity_id)
-            device_id = entry.device_id if entry is not None else None
-            by_device[device_id] = by_device.get(device_id, 0) + 1
-
-        lines: list[str] = []
-        for device_id, count in by_device.items():
-            name = self._device_name(device_id) if device_id else "—"
-            lines.append(f"• {name}: {count}")
-        return "\n".join(lines)
+        # Пункты маркированного списка Markdown: описание шага рендерится как разметка,
+        # и строки, начатые не с «-», склеились бы в один абзац.
+        return "\n".join(
+            f"- {self._group_label(key, entities)}"
+            for key, entities in grouped.items()
+        )
 
 
 def cv_multi_select(options: dict[str, str]) -> Any:
